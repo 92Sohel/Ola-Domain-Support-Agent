@@ -1,0 +1,17 @@
+======================================================================
+TASK 16: IN-MEMORY RESPONSE CACHING DEMONSTRATION
+======================================================================
+Query 1: 'What is Ola's refund policy for delayed rides?'
+Call 1 (Cache MISS): Duration = 40.25ms | Underlying Calls = 1
+
+Query 2 (Punctuation/Whitespace variation): '  what is ola's refund policy for delayed rides?!  '
+Call 2 (Cache HIT):  Duration = 0.01ms | Underlying Calls = 1
+
+Cache Telemetry Statistics:
+{
+  "total_entries": 1,
+  "hits": 1,
+  "misses": 1,
+  "hit_ratio": 0.5,
+  "underlying_call_count": 1
+}

@@ -1,0 +1,23 @@
+============================================================
+OLA SUPPORT TICKET DATASET VALIDATION REPORT
+============================================================
+Total Records Generated: 50 (Requirement: >= 40)
+Seed Used: 42
+
+Counts per Category (Requirement: every category >= 3):
+  - Account Access      : 10 records [OK]
+  - Billing             : 17 records [OK]
+  - General Inquiry     : 10 records [OK]
+  - Product Defect      :  6 records [OK]
+  - Technical Issue     :  7 records [OK]
+
+Counts per Status (Requirement: every status >= 1):
+  - Closed              :  6 records [OK]
+  - Escalated           :  8 records [OK]
+  - In Progress         :  9 records [OK]
+  - Open                : 11 records [OK]
+  - Resolved            : 16 records [OK]
+
+Escalated Records: 14/50 (28.0%)
+Escalated Percentage Requirement (10.0% to 30.0%): [OK]
+============================================================

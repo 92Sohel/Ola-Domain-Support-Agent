@@ -1,0 +1,23 @@
+======================================================================
+TASK 15: FOUR-LAYER AI GOVERNANCE MODEL
+======================================================================
+
+1. Application Layer: Least Autonomy Principle
+Testing authorized agent:
+  -> 'Ola Ticket Operations Specialist': ALLOWED (Result=True)
+Testing unauthorized agent:
+  -> 'Ola Knowledge Base Retrieval Specialist': BLOCKED
+  -> Error: Governance Violation [Application Layer]: Agent 'Ola Knowledge Base Retrieval Specialist' is not authorized to access 'check_support_ticket_status'. Least autonomy policy restricts ticket lookup access strictly to the dedicated 'Ola Ticket Operations Specialist'.
+
+Least Autonomy Architecture Guard Justification:
+Application Layer Guard Explanation: Under the principle of least autonomy, agents are granted only the minimal permissions necessary to fulfill their specific operational mandate. In our multi-agent architecture, the 'check_support_ticket_status' tool has access to internal customer ticket records, resolution metrics, and escalation flags. Permitting general-purpose retrieval or synthesis agents to execute database queries introduces unnecessary attack surfaces and risk of unauthorized data traversal. Consequently, our application layer enforces strict role-based tool gating: only the dedicated Lookup Agent ('Ola Ticket Operations Specialist') is granted access, while the Retrieval Agent and Response Composer are physically unwired and cryptographically/programmatically blocked from invoking ticket database tools.
+
+2. System Risk Classification:
+Risk Tier: Medium Risk
+System Risk Classification & Justification: The Ola Domain Support Agent is formally classified as 'Medium Risk' under the enterprise AI governance taxonomy. Unlike Low Risk applications (such as internal meeting transcription or non-interactive text summarization), customer support agents directly interact with the public, interpret binding service-level agreements, and calculate dispute escalation scores that impact customer trust and operational workloads. However, unlike High Risk systems (which govern clinical medical diagnostics, autonomous hiring decisions, credit scoring, or direct irrevocable financial disbursements), this agent operates in a bounded advisory capacity: all financial refunds are capped by strict policy thresholds, phone PII is masked at the perimeter, a secondary Autogen review team audits outputs before delivery, and any significant escalation triggers human frontline review. Therefore, its operational blast radius is firmly contained within the Medium Risk tier.
+
+3. Runtime Layer: Token and Cost Budget Cap
+Normal request (15 tokens):
+  -> Status: APPROVED (Estimated Tokens: 6)
+Oversized request (2,000 tokens):
+  -> REJECTED: Runtime Budget Exceeded [Runtime Layer]: Request estimated at 800 tokens exceeds the hard per-request safety cap of 500 tokens (Estimated Cost: $0.0016). Request rejected to prevent resource exhaustion.

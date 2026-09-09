@@ -1,0 +1,133 @@
+Strategy A (Fixed-Size Overlap) Chunks in ChromaDB: 54
+Strategy B (Sentence-Based) Chunks in ChromaDB:     26
+======================================================================
+EMPIRICAL 'I DON'T KNOW' THRESHOLD CALIBRATION
+======================================================================
+
+In-Scope Queries (Top-1 Cosine Similarity):
+  - [0.6226] 'What is Ola's refund and compensation policy for late driver...' -> Ola Rider Refund and Financial Compensation Policy
+  - [0.6488] 'What are the SLA response times for P1 critical safety issue...' -> Ola Support Service Level Agreement (SLA) by Severity
+  - [0.6932] 'How are repeat complaints handled when a rider reports the s...' -> Ola Repeat Complaint and Recurrent Issue Handling Policy
+  - [0.7331] 'What priority routing and benefits do VIP and Ola Select rid...' -> Ola Select and Corporate VIP Customer Handling Policy
+  - [0.7376] 'How long is customer support ticket data retained under the ...' -> Ola Support Ticket and Customer Data Retention Policy
+
+Deliberately Out-of-Scope Queries (Top-1 Cosine Similarity):
+  - [0.0883] 'What is the traditional recipe and ingredients for French on...' -> Ola Support Ticket Priority Classification Rules
+  - [0.0865] 'Who won the men's singles tennis championship at Wimbledon i...' -> Ola Rider Refund and Financial Compensation Policy
+  - [0.0687] 'How do I assemble an electric lawnmower engine in a home wor...' -> Ola Business Hours, Shift Coverage, and Holiday Support Policy
+
+Calibration Analysis:
+  - Min In-Scope Similarity:      0.6226
+  - Max Out-of-Scope Similarity:  0.0883
+  - Empirical Separation Margin:  0.5343
+  - Calibrated Decision Boundary: 0.36
+======================================================================
+
+======================================================================
+TASK 4: GROUNDED GENERATION DEMONSTRATIONS
+======================================================================
+
+Query: What is Ola's refund and compensation policy for late driver cancellations?
+  - Grounded: True (Top Cosine Sim: 0.6226, Cutoff: 0.36)
+  - Generated Answer: According to Ola Support Policy: Riders are entitled to full or partial fare refunds when service failures occur, including driver cancellations after arriving late, incorrect toll fee additions, or severe route deviations. Refund requests submitted within 72 hours of trip completion are evaluated automatically against GPS trip telemetry and driver dispatch records. Approved refunds are credited to the original payment source within 3 to 5 banking days, or deposited instantly to the user's Ola Money wallet balance at the rider's discretion. In severe disruption cases where a rider is stranded due to verified driver refusal, a inconvenience compensation credit of up to ₹250 may be authorized by an L2 specialist.
+  - Sources: ['OLA-KB-004', 'OLA-KB-006']
+
+Query: What are the SLA response times for P1 critical safety issues?
+  - Grounded: True (Top Cosine Sim: 0.6488, Cutoff: 0.36)
+  - Generated Answer: According to Ola Support Policy: Ola enforces strict Service Level Agreements across all support channels to guarantee timely resolution based on ticket severity. P1-Critical incidents require a frontline response within 15 minutes and a targeted resolution or safety containment within 2 hours. P2-High severity tickets mandate a human or senior agent acknowledgment within 1 hour and full operational resolution within 8 hours. P3-Medium tickets carry a 4-hour initial response window with complete dispute investigation and closure within 24 hours.
+  - Sources: ['OLA-KB-002', 'OLA-KB-001']
+
+Query: How are repeat complaints handled when a rider reports the same issue twice?
+  - Grounded: True (Top Cosine Sim: 0.6932, Cutoff: 0.36)
+  - Generated Answer: According to Ola Support Policy: A support ticket is tagged as a 'Repeat Complaint' if a rider or driver partner logs two or more inquiries regarding the same ride ID or root problem within a 7-day rolling window. Repeat complaints bypass Level 1 frontline scripts immediately and are reassigned directly to a designated Level 2 Senior Resolution Specialist. The assigned L2 specialist must review the complete prior conversation history and telemetry logs before contacting the user with a comprehensive resolution within 4 hours. If a customer files three consecutive complaints regarding driver behavior or app payment errors, an internal incident review is automatically dispatched to the City Fleet Operations team.
+  - Sources: ['OLA-KB-007', 'OLA-KB-004']
+
+Query: What priority routing and benefits do VIP and Ola Select riders get?
+  - Grounded: True (Top Cosine Sim: 0.7331, Cutoff: 0.36)
+  - Generated Answer: According to Ola Support Policy: Ola Select subscribers and registered Corporate Enterprise riders are categorized as VIP accounts and receive prioritized routing across all support queues. Inbound inquiries from VIP accounts are routed directly to dedicated Senior Relationship Managers with a guaranteed first-response SLA of under 5 minutes. Ola support tickets are systematically classified into four operational priority tiers: P1-Critical, P2-High, P3-Medium, and P4-Low. P1-Critical priority is reserved strictly for passenger safety hazards, in-trip physical emergencies, SOS alert activations, and vehicle accident incidents.
+  - Sources: ['OLA-KB-010', 'OLA-KB-001', 'OLA-KB-011']
+
+Query: How long is customer support ticket data retained under the DPDP Act?
+  - Grounded: True (Top Cosine Sim: 0.7376, Cutoff: 0.36)
+  - Generated Answer: According to Ola Support Policy: Support ticket records, chat transcripts, and recorded telephonic customer interactions are retained in active storage for 3 years from the date of ticket closure for dispute resolution and auditing. In compliance with the Indian Digital Personal Data Protection (DPDP) Act and internal governance guidelines, customer phone numbers and payment tokens are automatically masked after 180 days of ticket inactivity. After the 3-year statutory audit period expires, raw customer support logs are permanently purged or irreversibly anonymized for operational machine learning and aggregate analytics. Customers maintain the right to request a certified copy or erasure of their personal support history, subject to mandatory fraud prevention and ongoing legal holds.
+  - Sources: ['OLA-KB-012', 'OLA-KB-002']
+
+Query: What is the traditional recipe and ingredients for French onion soup?
+  - Grounded: False (Top Cosine Sim: 0.0883, Cutoff: 0.36)
+  - Generated Answer: I do not have sufficient information in the Ola knowledge base to answer this question.
+  - Sources: []
+================================================================================
+TASK 5: CHUNKING STRATEGY EVALUATION (DOCUMENT-LEVEL PRECISION & RECALL)
+================================================================================
+
+--- Strategy: Fixed-Size with Overlap (ola_kb_fixed_chunks) ---
+Query 1: "What is Ola's refund and compensation policy for l..."
+  - Ground Truth Docs (1): ['OLA-KB-004']
+  - Retrieved Unique Docs (2): ['OLA-KB-004', 'OLA-KB-006']
+  - Relevant Retrieved (1): ['OLA-KB-004']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 2: "What are the SLA response times for P1 critical sa..."
+  - Ground Truth Docs (2): ['OLA-KB-001', 'OLA-KB-002']
+  - Retrieved Unique Docs (1): ['OLA-KB-002']
+  - Relevant Retrieved (1): ['OLA-KB-002']
+  - Precision Arithmetic: 1 / 1 = 1.0000 (100.0%)
+  - Recall Arithmetic:    1 / 2 = 0.5000 (50.0%)
+Query 3: "How are repeat complaints handled when a rider rep..."
+  - Ground Truth Docs (1): ['OLA-KB-007']
+  - Retrieved Unique Docs (2): ['OLA-KB-007', 'OLA-KB-004']
+  - Relevant Retrieved (1): ['OLA-KB-007']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 4: "What priority routing and benefits do VIP and Ola ..."
+  - Ground Truth Docs (1): ['OLA-KB-010']
+  - Retrieved Unique Docs (3): ['OLA-KB-010', 'OLA-KB-001', 'OLA-KB-006']
+  - Relevant Retrieved (1): ['OLA-KB-010']
+  - Precision Arithmetic: 1 / 3 = 0.3333 (33.3%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 5: "How long is customer support ticket data retained ..."
+  - Ground Truth Docs (1): ['OLA-KB-012']
+  - Retrieved Unique Docs (2): ['OLA-KB-012', 'OLA-KB-002']
+  - Relevant Retrieved (1): ['OLA-KB-012']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+
+>> Fixed-Size with Overlap Averages: Precision = 0.5667 (56.7%), Recall = 0.9000 (90.0%)
+
+--- Strategy: Sentence-Based Chunks (ola_kb_sentence_chunks) ---
+Query 1: "What is Ola's refund and compensation policy for l..."
+  - Ground Truth Docs (1): ['OLA-KB-004']
+  - Retrieved Unique Docs (2): ['OLA-KB-004', 'OLA-KB-006']
+  - Relevant Retrieved (1): ['OLA-KB-004']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 2: "What are the SLA response times for P1 critical sa..."
+  - Ground Truth Docs (2): ['OLA-KB-001', 'OLA-KB-002']
+  - Retrieved Unique Docs (2): ['OLA-KB-002', 'OLA-KB-001']
+  - Relevant Retrieved (2): ['OLA-KB-001', 'OLA-KB-002']
+  - Precision Arithmetic: 2 / 2 = 1.0000 (100.0%)
+  - Recall Arithmetic:    2 / 2 = 1.0000 (100.0%)
+Query 3: "How are repeat complaints handled when a rider rep..."
+  - Ground Truth Docs (1): ['OLA-KB-007']
+  - Retrieved Unique Docs (2): ['OLA-KB-007', 'OLA-KB-004']
+  - Relevant Retrieved (1): ['OLA-KB-007']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 4: "What priority routing and benefits do VIP and Ola ..."
+  - Ground Truth Docs (1): ['OLA-KB-010']
+  - Retrieved Unique Docs (3): ['OLA-KB-010', 'OLA-KB-001', 'OLA-KB-011']
+  - Relevant Retrieved (1): ['OLA-KB-010']
+  - Precision Arithmetic: 1 / 3 = 0.3333 (33.3%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+Query 5: "How long is customer support ticket data retained ..."
+  - Ground Truth Docs (1): ['OLA-KB-012']
+  - Retrieved Unique Docs (2): ['OLA-KB-012', 'OLA-KB-002']
+  - Relevant Retrieved (1): ['OLA-KB-012']
+  - Precision Arithmetic: 1 / 2 = 0.5000 (50.0%)
+  - Recall Arithmetic:    1 / 1 = 1.0000 (100.0%)
+
+>> Sentence-Based Chunks Averages: Precision = 0.5667 (56.7%), Recall = 1.0000 (100.0%)
+================================================================================
+
+Recommendation: We deploy the Sentence-Based Chunking strategy. Sentence-based chunking achieved an average Precision of 56.67% and Recall of 100.00%, compared to Fixed-Size chunking's Precision of 56.67% and Recall of 90.00%. Natural sentence boundaries preserve semantic completeness per chunk, eliminating broken sentences and spurious overlap matches.
+================================================================================

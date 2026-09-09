@@ -1,0 +1,33 @@
+======================================================================
+TASK 6: SUPPORT TICKET STATUS & DESIGNED ESCALATION SCORE
+======================================================================
+Formula: escalation_score = min(1.0, round(0.40 * escalated + 0.60 * (days_since_created / 30.0), 3))
+Recommendation Threshold: 0.65 (~80th percentile of operational urgency)
+
+Lookup 'OLA-TCK-1001':
+  - Found: True
+  - Category: Account Access, Status: Open
+  - Resolution Time: 8.4h, Days Active: 8
+  - Escalation Score: 0.160
+  - Escalation Recommended: False
+  - Summary: Ticket OLA-TCK-1001 (Account Access) is currently 'Open'. Resolution time: 8.4h, Created: 8 days ago. Escalation Score: 0.160 (Escalation NOT required).
+
+Lookup 'OLA-TCK-1003':
+  - Found: True
+  - Category: Billing, Status: Escalated
+  - Resolution Time: 22.7h, Days Active: 0
+  - Escalation Score: 0.400
+  - Escalation Recommended: False
+  - Summary: Ticket OLA-TCK-1003 (Billing) is currently 'Escalated'. Resolution time: 22.7h, Created: 0 days ago. Escalation Score: 0.400 (Escalation NOT required).
+
+Lookup 'OLA-TCK-1007':
+  - Found: True
+  - Category: General Inquiry, Status: Escalated
+  - Resolution Time: 3.0h, Days Active: 25
+  - Escalation Score: 0.900
+  - Escalation Recommended: True
+  - Summary: Ticket OLA-TCK-1007 (General Inquiry) is currently 'Escalated'. Resolution time: 3.0h, Created: 25 days ago. Escalation Score: 0.900 (Escalation RECOMMENDED).
+
+Lookup 'OLA-TCK-9999':
+  - Found: False
+  - Error: Ticket 'OLA-TCK-9999' was not found in the Ola support ticket database.

@@ -1,0 +1,42 @@
+======================================================================
+TASK 11 & 12: FASTAPI ENDPOINTS, WEBSOCKET & STRUCTURED LOGGING
+======================================================================
+
+1. Testing POST /ask:
+Status Code: 200
+Trace ID: ad1a51b5-55ed-45de-b8a9-9719775a183d
+Sanitized Query: What is the refund policy for delayed rides? My phone is [REDACTED_PHONE]
+Answer: Ola Customer Support policy response for: Compose the final policy guidance response for query: What...
+Reviewed by Autogen: True (Approved: True)
+
+2. Testing POST /add-document:
+Status Code: 200
+Response: {'success': True, 'doc_id': 'OLA-KB-013', 'fixed_chunks_added': 2, 'sentence_chunks_added': 2, 'message': "Document 'OLA-KB-013' successfully indexed into both ChromaDB collections.", 'trace_id': 'fd6ab16f-0b50-44e1-91f0-225030d1cafa'}
+
+3. Testing WebSocket /ws/chat/{session_id} with Client Disconnect:
+Connected Event: {'event': 'connected', 'session_id': 'ws-demo-client', 'message': "Connected to Ola Support Agent session 'ws-demo-client'."}
+Agent Reply: Support Ticket Status for OLA-TCK-1002: The ticket has been looked up in the Ola support database. Details: St...
+[WebSocket] Client disconnected cleanly for session: 'ws-demo-client'. Server running.
+Client closed connection cleanly. (WebSocketDisconnect caught, server survives).
+
+4. Verifying Structured ELK Logging with Zero Disk PII:
+Latest Audit Log Entry (Formatted):
+{
+  "trace_id": "fd6ab16f-0b50-44e1-91f0-225030d1cafa",
+  "timestamp": "2026-09-09T15:42:23.350774+00:00",
+  "session_id": "default-session",
+  "endpoint": "/add-document",
+  "duration_ms": 64.3,
+  "status": "SUCCESS",
+  "sanitized_query": "OLA-KB-013",
+  "sanitized_response": {
+    "success": true,
+    "doc_id": "OLA-KB-013",
+    "fixed_chunks_added": 2,
+    "sentence_chunks_added": 2,
+    "message": "Document 'OLA-KB-013' successfully indexed into both ChromaDB collections.",
+    "trace_id": "fd6ab16f-0b50-44e1-91f0-225030d1cafa"
+  },
+  "metadata": {}
+}
+Zero Disk PII Guarantee Confirmed: Phone number masked to [REDACTED_PHONE].

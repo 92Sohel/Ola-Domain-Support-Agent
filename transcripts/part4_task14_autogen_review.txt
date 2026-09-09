@@ -1,0 +1,15 @@
+======================================================================
+TASK 14: AUTOGEN TWO-AGENT REVIEW STAGE DEMONSTRATION
+======================================================================
+Team Architecture: RoundRobinGroupChat(max_turns=2, custom_message_types=[StructuredMessage[VerdictModel]])
+Agents: PolicyComplianceReviewerAgent -> FinalEditorAgent
+
+--- Test Case 1: Compliant Draft (Approved Unchanged) ---
+Approved:     True
+Reason:       Policy compliance confirmed against retrieved context; approved without modification.
+Final Answer: According to Ola Support Policy: P1-Critical incidents require a frontline response within 15 minutes and resolution within 2 hours. P2-High severity requires response within 1 hour.
+
+--- Test Case 2: Ungrounded Draft (Caught & Revised) ---
+Approved:     False
+Reason:       Caught and removed ungrounded compensation claim; revised response to align with ₹250 Ola refund cap.
+Final Answer: According to Ola Support Policy: Approved refunds are credited to the original payment source within 3 to 5 banking days, or deposited to the rider's Ola Money wallet. For severe trip disruptions caused by verified driver refusal, an inconvenience compensation credit of up to ₹250 may be authorized by a Level 2 specialist. (Ungrounded cash claims removed).
