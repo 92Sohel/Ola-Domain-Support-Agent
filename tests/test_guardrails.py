@@ -20,6 +20,7 @@ from guardrails import (
 def test_pii_phone_masking():
     samples = [
         ("My number is +91 9876543210 please call me", True),
+        ("Please call me at +91 98765 43210 or 9876543210", True),
         ("Driver called from 09876543210 regarding location", True),
         ("Contact support at +91-9123456789 immediately", True),
         ("Booking reference is OLA-TCK-1001 with no phone", False),

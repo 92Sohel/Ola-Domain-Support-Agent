@@ -12,9 +12,9 @@ Covers:
 import re
 from typing import Tuple, Dict, Any, List
 
-# Indian phone number regex: +91 followed by 10 digits, or standalone 10-digit mobile starting with 6-9
+# Indian phone number regex: +91 followed by 10 digits (allowing spaces/hyphens), or standalone 10-digit mobile starting with 6-9
 PHONE_REGEX = re.compile(
-    r'(?:(?:\+91[\s-]?)?(?:0)?[6-9]\d{9})'
+    r'(?:(?:\+91[\s-]*)?(?:0)?[6-9](?:[\s-]?\d){9})'
 )
 
 # Common prompt injection / jailbreak patterns
