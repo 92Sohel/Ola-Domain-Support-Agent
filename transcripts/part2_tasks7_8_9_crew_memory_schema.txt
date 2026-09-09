@@ -4,18 +4,18 @@ TASKS 7 & 9: CREWAI MULTI-AGENT EXECUTION & PYDANTIC SCHEMA
 Telemetry Disabled: CREWAI_DISABLE_TELEMETRY=true confirmed.
 
 --- Kickoff 1: Knowledge Base Query (Retrieval Agent Invocation) ---
-Query: Compose the final policy guidance response for query: What is the refund policy for rides canceled due to driver delays?
+Query: What is the refund policy for rides canceled due to driver delays?
 Response Type: policy_inquiry
-Sources Cited: ['OLA-KB-CORE']
-Answer: Ola Customer Support policy response for: Compose the final policy guidance response for query: What is the refund polic...
+Sources Cited: ['OLA-KB-004', 'OLA-KB-006']
+Answer: According to Ola Support Policy: Riders are entitled to full or partial fare refunds when service failures occur, includ...
 Validated against CrewResponse Pydantic Model: SUCCESS
 
 --- Kickoff 2: Ticket Status Query (Lookup Agent Invocation) ---
-Query: Format and synthesize the final support response for query: Can you check the current status of support ticket OLA-TCK-1002?
+Query: Can you check the current status of support ticket OLA-TCK-1002?
 Response Type: ticket_status
-Escalation Recommended: False
-Ticket Details: {'record_id': 'OLA-TCK-1002', 'summary': None}
-Answer: Support Ticket Status for OLA-TCK-1002: The ticket has been looked up in the Ola support database. Details: Status retrieved and validated.
+Escalation Recommended: True
+Ticket Details: {'record_id': 'OLA-TCK-1002', 'summary': "Ticket OLA-TCK-1002 (Billing) is currently 'Resolved'. Resolution time: 13.0h, Created: 17 days ago. Escalation Score: 0.740 (Escalation RECOMMENDED)."}
+Answer: Support Ticket Status for OLA-TCK-1002: The ticket has been looked up in the Ola support database. Details: Ticket OLA-TCK-1002 (Billing) is currently 'Resolved'. Resolution time: 13.0h, Created: 17 days ago. Escalation Score: 0.740 (Escalation RECOMMENDED).
 Validated against CrewResponse Pydantic Model: SUCCESS
 
 ======================================================================
@@ -24,13 +24,13 @@ TASK 8: SESSION MEMORY DEMONSTRATION
 
 [Session A: Multi-turn Conversation 'session_user_sarah']
 Turn 1: 'Please check ticket OLA-TCK-1005'
-  -> Agent: Support Ticket Status for OLA-TCK-1005: The ticket has been looked up in the Ola support database. Details: Status retrieved and validated.
+  -> Agent: Support Ticket Status for OLA-TCK-1005: The ticket has been looked up in the Ola support database. Details: Ticket OLA-TCK-1005 (Billing) is currently 'Resolved'. Resolution time: 7.4h, Created: 22 days ago. Escalation Score: 0.440 (Escalation NOT required).
 
 Turn 2: Follow-up referencing prior turn: 'What is its escalation recommendation?'
-  -> Context Resolved: Format and synthesize the final support response for query: What is its escalation recommendation? (referencing OLA-TCK-1005)
-  -> Agent: Support Ticket Status for OLA-TCK-1005: The ticket has been looked up in the Ola support database. Details: Status retrieved and validated.
+  -> Context Resolved: What is its escalation recommendation? (referencing OLA-TCK-1005)
+  -> Agent: Support Ticket Status for OLA-TCK-1005: The ticket has been looked up in the Ola support database. Details: Ticket OLA-TCK-1005 (Billing) is currently 'Resolved'. Resolution time: 7.4h, Created: 22 days ago. Escalation Score: 0.440 (Escalation NOT required).
 
 [Session B: Fresh Conversation 'session_user_fresh']
 Turn 1: 'What is its escalation recommendation?' (without prior context)
-  -> Query: Compose the final policy guidance response for query: What is its escalation recommendation?
+  -> Query: What is its escalation recommendation?
   -> Response Type: policy_inquiry (State correctly absent/reset)

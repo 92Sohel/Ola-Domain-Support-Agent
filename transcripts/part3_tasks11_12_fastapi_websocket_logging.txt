@@ -4,29 +4,29 @@ TASK 11 & 12: FASTAPI ENDPOINTS, WEBSOCKET & STRUCTURED LOGGING
 
 1. Testing POST /ask:
 Status Code: 200
-Trace ID: ad1a51b5-55ed-45de-b8a9-9719775a183d
+Trace ID: b5a8a826-1c47-4c3b-9685-d2a684bc0a15
 Sanitized Query: What is the refund policy for delayed rides? My phone is [REDACTED_PHONE]
-Answer: Ola Customer Support policy response for: Compose the final policy guidance response for query: What...
+Answer: According to Ola Support Policy: Riders are entitled to full or partial fare refunds when service fa...
 Reviewed by Autogen: True (Approved: True)
 
 2. Testing POST /add-document:
 Status Code: 200
-Response: {'success': True, 'doc_id': 'OLA-KB-013', 'fixed_chunks_added': 2, 'sentence_chunks_added': 2, 'message': "Document 'OLA-KB-013' successfully indexed into both ChromaDB collections.", 'trace_id': 'fd6ab16f-0b50-44e1-91f0-225030d1cafa'}
+Response: {'success': True, 'doc_id': 'OLA-KB-013', 'fixed_chunks_added': 2, 'sentence_chunks_added': 2, 'message': "Document 'OLA-KB-013' successfully indexed into both ChromaDB collections.", 'trace_id': 'c8f6295c-df42-4b63-b804-8799e882d337'}
 
 3. Testing WebSocket /ws/chat/{session_id} with Client Disconnect:
 Connected Event: {'event': 'connected', 'session_id': 'ws-demo-client', 'message': "Connected to Ola Support Agent session 'ws-demo-client'."}
-Agent Reply: Support Ticket Status for OLA-TCK-1002: The ticket has been looked up in the Ola support database. Details: St...
+Agent Reply: Support Ticket Status for OLA-TCK-1002: The ticket has been looked up in the Ola support database. Details: Ti...
 [WebSocket] Client disconnected cleanly for session: 'ws-demo-client'. Server running.
 Client closed connection cleanly. (WebSocketDisconnect caught, server survives).
 
 4. Verifying Structured ELK Logging with Zero Disk PII:
 Latest Audit Log Entry (Formatted):
 {
-  "trace_id": "fd6ab16f-0b50-44e1-91f0-225030d1cafa",
-  "timestamp": "2026-09-09T15:42:23.350774+00:00",
+  "trace_id": "c8f6295c-df42-4b63-b804-8799e882d337",
+  "timestamp": "2026-09-09T16:40:43.072213+00:00",
   "session_id": "default-session",
   "endpoint": "/add-document",
-  "duration_ms": 64.3,
+  "duration_ms": 56.87,
   "status": "SUCCESS",
   "sanitized_query": "OLA-KB-013",
   "sanitized_response": {
@@ -35,7 +35,7 @@ Latest Audit Log Entry (Formatted):
     "fixed_chunks_added": 2,
     "sentence_chunks_added": 2,
     "message": "Document 'OLA-KB-013' successfully indexed into both ChromaDB collections.",
-    "trace_id": "fd6ab16f-0b50-44e1-91f0-225030d1cafa"
+    "trace_id": "c8f6295c-df42-4b63-b804-8799e882d337"
   },
   "metadata": {}
 }

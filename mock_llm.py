@@ -73,6 +73,27 @@ def extract_observation(messages: Union[str, List[Any]]) -> Optional[str]:
             if role in ["tool", "function"]:
                 return str(content).strip()
                 
+            # If task context from a prior agent is passed (e.g. to Response Composer)
+            if isinstance(content, str) and "This is the context you're working with:" in content:
+                ctx_part = content.split("This is the context you're working with:")[1].strip()
+                # Check for JSON object from prior task
+                try:
+                    jm = re.search(r'\{.*\}', ctx_part, re.DOTALL)
+                    if jm:
+                        cdata = json.loads(jm.group(0))
+                        ans = cdata.get("answer") or cdata.get("summary", "")
+                        srcs = cdata.get("sources", [])
+                        if ans:
+                            ans_str = str(ans).strip()
+                            if srcs and not any(s in ans_str for s in srcs):
+                                return f"{ans_str} (Sources: {', '.join(srcs)})"
+                            return ans_str
+                except Exception:
+                    pass
+                clean_ctx = ctx_part.split("Provide your complete response:")[0].strip()
+                if clean_ctx:
+                    return clean_ctx
+                
     return None
 
 
@@ -89,7 +110,12 @@ def extract_query_text(messages: Union[str, List[Any]]) -> str:
     # Try to extract from 'Current Task:' or 'task:'
     m = re.search(r'(?:Current Task|task):\s*(.*?)(?=\n\n|\n[A-Z][a-z]+:|\Z)', full_text, re.IGNORECASE | re.DOTALL)
     if m:
-        return m.group(1).strip()
+        task_text = m.group(1).strip()
+        # If task text wraps 'for query: <actual_query>', extract the user's actual question
+        qm = re.search(r'for query:\s*(.*)', task_text, re.IGNORECASE)
+        if qm:
+            return qm.group(1).strip()
+        return task_text
         
     # Or first user message
     if isinstance(messages, list):
@@ -182,20 +208,30 @@ class OlaCrewBaseLLM(BaseLLM):
         
         if is_ticket_query:
             rec_id = ticket_id or "OLA-TCK-1001"
+            clean_obs = obs.strip() if obs else ""
+            clean_obs = re.sub(r'^(?:Support Ticket Status for [^:]+:\s*The ticket has been looked up in the Ola support database\.\s*Details:\s*)+', '', clean_obs).strip()
+            clean_obs = re.sub(r'\s*\(Sources?:.*?\)', '', clean_obs).strip()
             answer_text = (
                 f"Support Ticket Status for {rec_id}: The ticket has been looked up in the Ola support database. "
-                f"Details: {obs if obs else 'Status retrieved and validated.'}"
+                f"Details: {clean_obs if clean_obs else 'Status retrieved and validated.'}"
             )
             response_type = "ticket_status"
             sources = ["SUPPORT_TICKETS_DB"]
             escalation_recommended = bool(obs and "RECOMMENDED" in obs)
-            ticket_details = {"record_id": rec_id, "summary": obs}
+            ticket_details = {"record_id": rec_id, "summary": clean_obs or obs}
         else:
             if obs:
-                answer_text = f"According to Ola Support Policy: {obs}"
-                sources = ["OLA-KB-CORE"]
+                clean_obs = obs.strip()
+                while clean_obs.startswith("According to Ola Support Policy:"):
+                    clean_obs = clean_obs[len("According to Ola Support Policy:"):].strip()
+                kb_matches = re.findall(r'OLA-KB-\d{3}', obs)
+                clean_obs = re.sub(r'\s*\(Sources?:.*?\)', '', clean_obs).strip()
+                answer_text = f"According to Ola Support Policy: {clean_obs}"
+                sources = list(dict.fromkeys(kb_matches)) if kb_matches else ["OLA-KB-CORE"]
             else:
-                answer_text = f"Ola Customer Support policy response for: {query[:80]}."
+                qm = re.search(r'for query:\s*(.*)', query, re.IGNORECASE)
+                clean_q = qm.group(1).strip() if qm else query.strip()
+                answer_text = f"According to Ola Support Policy: Ola Customer Support policy response for query: {clean_q[:80]}."
                 sources = ["OLA-KB-CORE"]
             response_type = "policy_inquiry"
             escalation_recommended = False

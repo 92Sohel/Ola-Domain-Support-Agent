@@ -67,6 +67,9 @@ def rag_search_tool(query: str) -> str:
     """Searches the Ola Knowledge Base for policy information, SLAs, refunds, and support guidelines."""
     rag = get_rag_core()
     res = grounded_generation(query, rag)
+    sources = res.get("sources", [])
+    if sources:
+        return f"{res['answer']} (Sources: {', '.join(sources)})"
     return res["answer"]
 
 
