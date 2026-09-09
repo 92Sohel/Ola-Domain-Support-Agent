@@ -19,12 +19,15 @@ PHONE_REGEX = re.compile(
 
 # Common prompt injection / jailbreak patterns
 PROMPT_INJECTION_PATTERNS = [
-    r'ignore\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instructions|prompts|rules)',
-    r'disregard\s+(?:all\s+)?(?:instructions|rules|guidelines|policies)',
-    r'(?:reveal|print|show|output)\s+(?:the\s+)?system\s+prompt',
-    r'you\s+are\s+now\s+(?:in\s+)?(?:dan|developer|god)\s+mode',
+    r'ignore\s+(?:all\s+)?(?:previous|above|prior|system)\s+.*?(?:instructions|prompts|rules|policies)',
+    r'disregard\s+(?:all\s+)?.*?(?:instructions|rules|guidelines|policies)',
+    r'(?:reveal|print|show|output|dump)\s+(?:the\s+)?(?:system\s+prompt|database|schema|credentials)',
+    r'system\s+override',
+    r'you\s+are\s+now\s+(?:in\s+)?(?:dan|developer|god)',
+    r'unlimited\s+autonomy',
     r'bypass\s+(?:all\s+)?(?:filters|safety|guardrails)',
-    r'act\s+as\s+an\s+unrestricted',
+    r'act\s+as\s+an?\s+unrestricted',
+    r'\b(?:dan)\s+mode\b',
     r'simulated\s+jailbreak',
     r'jailbreak\s+activated',
 ]
