@@ -223,13 +223,16 @@ class SessionMemoryManager:
         if not history:
             return current_query
             
-        # Check if current query lacks a ticket ID but previous turn had one
+        # Only resolve prior ticket ID if query contains anaphoric references (e.g. 'it', 'its', 'the ticket', 'status')
         current_tid = extract_record_id(current_query)
         if not current_tid:
-            for msg in reversed(history):
-                prev_tid = extract_record_id(msg.content)
-                if prev_tid:
-                    return f"{current_query} (referencing {prev_tid})"
+            lower_q = current_query.lower()
+            anaphoric_keywords = [" it", "its", "the ticket", "that ticket", "this ticket", "status", "escalat", "update", "follow up", "follow-up"]
+            if any(k in lower_q for k in anaphoric_keywords):
+                for msg in reversed(history):
+                    prev_tid = extract_record_id(msg.content)
+                    if prev_tid:
+                        return f"{current_query} (referencing {prev_tid})"
                     
         return current_query
 

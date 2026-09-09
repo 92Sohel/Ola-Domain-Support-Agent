@@ -163,8 +163,9 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         )
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
         
-    # 3. In-Memory Response Caching Check
-    cached_entry = GLOBAL_CACHE.get(sanitized_query)
+    # 3. In-Memory Response Caching Check (Session-aware to prevent cross-session memory pollution)
+    cache_key = f"{session_id}:{sanitized_query}"
+    cached_entry = GLOBAL_CACHE.get(cache_key)
     if cached_entry:
         duration_ms = (time.perf_counter() - t0) * 1000.0
         cached_resp = AskResponse(
@@ -210,8 +211,8 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         "autogen_review_reason": verdict.reason,
     }
     
-    # Save to response cache
-    GLOBAL_CACHE.set(sanitized_query, resp_data)
+    # Save to response cache (keyed by session and query)
+    GLOBAL_CACHE.set(cache_key, resp_data)
     
     full_resp = AskResponse(
         **resp_data,
