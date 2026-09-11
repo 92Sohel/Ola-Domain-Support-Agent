@@ -376,6 +376,16 @@ async def websocket_chat_endpoint(websocket: WebSocket, session_id: str):
             pass
 
 
+# ==========================================
+# Multimodal Extension (PDF & Image Support)
+# ==========================================
+try:
+    from multimodal_support import multimodal_router
+    app.include_router(multimodal_router)
+except ImportError:
+    pass
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
