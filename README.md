@@ -159,6 +159,7 @@ class CrewResponse(BaseModel):
 
 ### FastAPI Deployment (`app.py`)
 - **`POST /ask`:** Accepts `AskRequest(query, session_id, trace_id)`, runs guardrails $\to$ budget check $\to$ response cache $\to$ CrewAI crew $\to$ Autogen review stage $\to$ structured `AskResponse`.
+- **`POST /multimodal/analyze`:** Accepts PDF documents or ride screenshots (`.png`, `.jpg`, `.jpeg`, `.webp`), performs local OCR / digital PDF text extraction, detects key entities (ticket IDs, booking CRNs, amounts), and executes through the multi-agent support crew.
 - **`POST /add-document`:** Accepts `AddDocumentRequest`, chunks and upserts new knowledge into both ChromaDB collections dynamically.
 - **`GET /health`:** Liveness probe.
 - **`@app.websocket("/ws/chat/{session_id}")`:** Real-time multi-turn chat. Gracefully handles `WebSocketDisconnect`, logging clean disconnection while maintaining uptime for all other connected clients.
@@ -248,3 +249,36 @@ uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 - Interactive API Docs: `http://127.0.0.1:8000/docs`
 - Health check: `http://127.0.0.1:8000/health`
 - WebSocket Chat: `ws://127.0.0.1:8000/ws/chat/{session_id}`
+- Multimodal File Upload: `POST /multimodal/analyze`
+
+### 5. Interactive Plain-English Terminal Chat
+To converse naturally with the support agent without Swagger UI or JSON syntax:
+```bash
+python interactive_chat.py
+```
+
+### 6. Multimodal Document & Image Analysis
+To analyze a ride receipt PDF or screenshot directly from the terminal:
+```bash
+python multimodal_support.py --file path/to/receipt.png --prompt "Is this ride eligible for refund?"
+```
+
+---
+
+## 8. Multimodal Document & Image Support (`multimodal_support.py`)
+
+Provides document and screenshot analysis for ride receipts, invoices, and dispute evidence:
+- **PDF Document Parsing (`pypdf` + `pdfminer`):** Extracts digital text, page numbers, and invoice metadata from trip receipts and policy documents.
+- **Image OCR & Analysis (`Pillow` + Native Media OCR):** Extracts printed ticket numbers (`OLA-TCK-XXXX`), ride CRNs, and currency values directly from mobile screenshots or meter photos using local zero-network optical character recognition.
+- **Support Pipeline Execution:** Extracted text is combined with user prompts and evaluated through the standard perimeter guardrails, CrewAI multi-agent crew, and Autogen review stage.
+
+---
+
+## 9. Interactive Terminal Chat (`interactive_chat.py`)
+
+For interactive testing in plain English without Swagger UI or raw JSON:
+```bash
+python interactive_chat.py
+```
+- Provides a conversational prompt (`You > `) with automatic multi-turn session memory.
+- Commands: `new` (start fresh session), `exit` (quit).
