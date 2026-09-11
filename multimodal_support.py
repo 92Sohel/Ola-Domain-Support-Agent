@@ -335,23 +335,43 @@ def analyze_uploaded_file(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ola Multimodal Document & Image Analyzer")
-    parser.add_argument("--file", required=True, help="Path to PDF or image file")
+    parser.add_argument("--file", required=False, default=None, help="Path to PDF or image file")
     parser.add_argument("--prompt", default=None, help="Optional user question about the document")
     parser.add_argument("--session", default="cli-multimodal", help="Session ID for chat memory")
     args = parser.parse_args()
 
-    if not os.path.exists(args.file):
-        print(f"Error: File not found at '{args.file}'")
+    file_path = args.file
+    prompt = args.prompt
+
+    if not file_path:
+        print("=" * 70)
+        print("   OLA MULTIMODAL DOCUMENT & IMAGE ANALYZER")
+        print("=" * 70)
+        print("Analyze ride receipts, invoices, or screenshots (.png, .jpg, .pdf)")
+        try:
+            file_input = input("\nEnter file path (or drag-and-drop file here): ").strip().strip('"').strip("'")
+            if not file_input:
+                print("No file provided. Exiting.")
+                sys.exit(0)
+            file_path = file_input
+            prompt_input = input("Enter optional question/prompt (or press Enter to skip): ").strip()
+            prompt = prompt_input if prompt_input else None
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting.")
+            sys.exit(0)
+
+    if not os.path.exists(file_path):
+        print(f"\nError: File not found at '{file_path}'")
         sys.exit(1)
 
-    print("=" * 70)
-    print(f"Analyzing File: {os.path.basename(args.file)}")
+    print("\n" + "=" * 70)
+    print(f"Analyzing File: {os.path.basename(file_path)}")
     print("=" * 70)
     
     res = analyze_file_and_query_agent(
-        file_bytes_or_path=args.file,
-        filename=os.path.basename(args.file),
-        user_prompt=args.prompt,
+        file_bytes_or_path=file_path,
+        filename=os.path.basename(file_path),
+        user_prompt=prompt,
         session_id=args.session
     )
     
