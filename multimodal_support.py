@@ -1,4 +1,4 @@
-﻿"""
+"""
 multimodal_support.py - Multimodal Document & Image Analysis for Ola Domain Support Agent
 Track: Business Operations / Customer Support (Ola)
 
@@ -299,7 +299,7 @@ multimodal_router = APIRouter(prefix="/multimodal", tags=["Multimodal Document S
     response_model=MultimodalAnalysisResult,
     summary="Upload and analyze a PDF receipt or ride screenshot"
 )
-async def analyze_uploaded_file(
+def analyze_uploaded_file(
     file: UploadFile = File(..., description="PDF document or image file (.pdf, .png, .jpg, .webp)"),
     prompt: Optional[str] = Form(None, description="Optional user question regarding this file"),
     session_id: Optional[str] = Form("multimodal-session", description="Conversation session ID")
@@ -308,7 +308,7 @@ async def analyze_uploaded_file(
     Accepts a PDF document or image file, performs local OCR/text extraction,
     and runs the synthesized inquiry through the Ola Domain Support Agent multi-agent pipeline.
     """
-    contents = await file.read()
+    contents = file.file.read()
     if not contents:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
