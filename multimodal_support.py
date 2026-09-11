@@ -222,8 +222,12 @@ def extract_entities_from_text(text: str) -> Dict[str, List[str]]:
     crns = re.findall(r'CRN[-_]?\d{7,10}', text, re.IGNORECASE)
     if crns:
         entities["booking_crns"] = list(dict.fromkeys([c.upper() for c in crns]))
+
+    bookings = re.findall(r'(?:Booking\s*(?:ID)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', text, re.IGNORECASE)
+    if bookings:
+        entities["booking_ids"] = list(dict.fromkeys([b.upper() for b in bookings]))
         
-    amounts = re.findall(r'[₹Rs\.]\s*\d+(?:,\d+)*(?:\.\d{2})?', text)
+    amounts = re.findall(r'(?:[₹$Rs\.]\s*|\b)\d+(?:\.\d{2})\b', text)
     if amounts:
         entities["amounts"] = list(dict.fromkeys(amounts))
         
