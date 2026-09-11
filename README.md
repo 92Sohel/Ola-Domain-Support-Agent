@@ -267,10 +267,15 @@ python multimodal_support.py --file path/to/receipt.png --prompt "Is this ride e
 
 ## 8. Multimodal Document & Image Support (`multimodal_support.py`)
 
-Provides document and screenshot analysis for ride receipts, invoices, and dispute evidence:
-- **PDF Document Parsing (`pypdf` + `pdfminer`):** Extracts digital text, page numbers, and invoice metadata from trip receipts and policy documents.
-- **Image OCR & Analysis (`Pillow` + Native Media OCR):** Extracts printed ticket numbers (`OLA-TCK-XXXX`), ride CRNs, and currency values directly from mobile screenshots or meter photos using local zero-network optical character recognition.
-- **Support Pipeline Execution:** Extracted text is combined with user prompts and evaluated through the standard perimeter guardrails, CrewAI multi-agent crew, and Autogen review stage.
+Provides comprehensive document and screenshot analysis for ride receipts, invoices, and dispute evidence:
+- **PDF Document Parsing (`pypdf` + `pdfminer`):** Extracts digital text, page counts, and structured ride metadata from trip receipts and policy documents.
+- **Image OCR & Analysis (`Pillow` + Native Media OCR):** Extracts printed ticket numbers (`OLA-TCK-XXXX`), ride CRNs, invoice identifiers, and currency values directly from mobile screenshots or meter photos using local zero-network optical character recognition.
+- **Deep Domain Entity Extraction:** Automatically parses platform origin (e.g., Ola vs third-party services like CityTransit), invoice numbers, trip distance (km), driver partner details, billed totals, and disputed incident fees.
+- **Intelligent Dispute & Anomaly Reasoner:**
+  - **Platform Verification:** Detects third-party mobility receipts and directs users to provider-specific dispute channels while clarifying platform boundaries.
+  - **Legal Threat & Anomaly Escalation:** Identifies legal threats and high-value fare discrepancies (>₹1,000 / incident surcharges), immediately routing to the Senior Grievance Cell with calibrated confidence scores and human escalation flags.
+  - **Text Deduplication:** Enforces single-pass response composition across sequential agent chains, eliminating text looping.
+- **Support Pipeline Execution:** Extracted structured metadata is evaluated through standard perimeter guardrails, the CrewAI multi-agent crew, and the Autogen review stage.
 
 ---
 

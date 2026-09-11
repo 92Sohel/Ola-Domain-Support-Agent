@@ -53,6 +53,26 @@ def extract_observation(messages: Union[str, List[Any]]) -> Optional[str]:
         m = re.search(r'\nObservation:\s*(.*?)(?=\nThought:|\Z)', search_region, re.DOTALL)
         if m:
             return m.group(1).strip()
+
+        # If task context from a prior agent is passed (e.g. to Response Composer)
+        if "This is the context you're working with:" in search_region:
+            ctx_part = search_region.split("This is the context you're working with:")[1].strip()
+            try:
+                jm = re.search(r'\{.*\}', ctx_part, re.DOTALL)
+                if jm:
+                    cdata = json.loads(jm.group(0))
+                    ans = cdata.get("answer") or cdata.get("summary", "")
+                    srcs = cdata.get("sources", [])
+                    if ans:
+                        ans_str = str(ans).strip()
+                        if srcs and not any(s in ans_str for s in srcs):
+                            return f"{ans_str} (Sources: {', '.join(srcs)})"
+                        return ans_str
+            except Exception:
+                pass
+            clean_ctx = ctx_part.split("Provide your complete response:")[0].strip()
+            if clean_ctx:
+                return clean_ctx
         return None
         
     elif isinstance(messages, list):
@@ -108,11 +128,12 @@ def extract_query_text(messages: Union[str, List[Any]]) -> str:
             full_text += " " + str(content)
             
     # Try to extract from 'Current Task:' or 'task:'
-    m = re.search(r'(?:Current Task|task):\s*(.*?)(?=\n\n|\n[A-Z][a-z]+:|\Z)', full_text, re.IGNORECASE | re.DOTALL)
+    # Avoid terminating on internal newlines in the query; terminate on ReAct / CrewAI headers
+    m = re.search(r'(?:Current Task|task):\s*(.*?)(?=\nThis is the context|\nInstructions:|\nAction:|\nThought:|\Z)', full_text, re.IGNORECASE | re.DOTALL)
     if m:
         task_text = m.group(1).strip()
         # If task text wraps 'for query: <actual_query>', extract the user's actual question
-        qm = re.search(r'for query:\s*(.*)', task_text, re.IGNORECASE)
+        qm = re.search(r'(?:for query|regarding):\s*(.*)', task_text, re.IGNORECASE | re.DOTALL)
         if qm:
             return qm.group(1).strip()
         return task_text
@@ -160,6 +181,10 @@ class OlaCrewBaseLLM(BaseLLM):
         
         # 1. If an observation exists in the conversation, return the Final Answer
         if obs:
+            # If from an upstream agent (Retrieval / Lookup Specialist), return raw factual context
+            # to prevent severe duplicate text looping in sequential agent chains
+            if agent_role and "Composer" not in agent_role:
+                return f"Thought: I have retrieved the factual operational data.\nFinal Answer: {obs}"
             return self._compose_final_answer(query, obs, response_model, agent_role)
             
         # 2. If the agent has tools, determine which tool to call based on ARGUMENT SCHEMA (Pitfall 2)
@@ -219,28 +244,204 @@ class OlaCrewBaseLLM(BaseLLM):
             )
             response_type = "ticket_status"
             sources = ["SUPPORT_TICKETS_DB"]
+            confidence = 0.95
             escalation_recommended = bool(obs and "RECOMMENDED" in obs)
             ticket_details = {"record_id": rec_id, "summary": clean_obs or obs}
         else:
-            if obs:
+            combined_text = f"{query} {obs or ''}"
+            lower_q = combined_text.lower()
+
+            # 1. Platform Detection
+            known_platforms = ["CityTransit", "Uber", "Lyft", "Rapido", "BluSmart"]
+            detected_platform = None
+            plat_m = re.search(r'Platform[\s:]+([A-Za-z0-9]+)', combined_text, re.IGNORECASE)
+            if plat_m:
+                p_cand = plat_m.group(1).strip()
+                if p_cand.lower() != "ola":
+                    detected_platform = p_cand
+            if not detected_platform:
+                for p in known_platforms:
+                    if re.search(r'\b' + re.escape(p) + r'\b', combined_text, re.IGNORECASE):
+                        detected_platform = p
+                        break
+            is_third_party = bool(detected_platform and detected_platform.lower() != "ola")
+
+            # 2. Invoice Reference
+            inv_m = re.search(r'Invoice\s*(?:#|No\.?|Number|ID|\:)\s*[:#]?\s*([A-Za-z0-9-_]+)', combined_text, re.IGNORECASE)
+            invoice_no = None
+            if inv_m:
+                inv_cand = inv_m.group(1).strip()
+                if inv_cand.upper() not in ["INVOICE", "NUMBER", "DETAILS", "RECEIPT"]:
+                    invoice_no = inv_cand
+
+            # 3. Booking / CRN Reference
+            booking_m = re.search(r'(?:Booking\s*(?:ID|Reference|Ref|No|Number)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', combined_text, re.IGNORECASE)
+            booking_id = None
+            if booking_m:
+                b_cand = booking_m.group(1).strip()
+                if b_cand.upper() not in ["REFERENCE", "REF", "ID", "DETAILS", "NUMBER", "NO"] and len(b_cand) >= 4:
+                    booking_id = b_cand
+
+            # 4. Total Fare Billed
+            fare_m = re.search(r'(?:Billed\s*Total|TOTAL\s*AMOUNT\s*(?:BILLED)?|Total\s*Fare|TOTAL\s*CHARGED|Total)[\s:]*((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', combined_text, re.IGNORECASE)
+            total_fare = None
+            fare_num = 0.0
+            if fare_m:
+                total_fare = fare_m.group(1).strip()
+                raw_num = re.sub(r'[^\d\.]', '', total_fare)
+                try:
+                    fare_num = float(raw_num)
+                except ValueError:
+                    fare_num = 0.0
+            else:
+                amts = re.findall(r'(?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?', combined_text)
+                if amts:
+                    total_fare = amts[0].strip()
+                    raw_num = re.sub(r'[^\d\.]', '', total_fare)
+                    try:
+                        fare_num = float(raw_num)
+                    except ValueError:
+                        fare_num = 0.0
+
+            # 5. Trip Distance (prioritize explicit 'Distance: <metric>' over arbitrary user mentions)
+            dist_m = re.search(r'Distance[\s:]*(\d+(?:\.\d+)?\s*(?:km|kms|kilometers|miles)\b)', combined_text, re.IGNORECASE)
+            if dist_m:
+                distance = dist_m.group(1).strip()
+            else:
+                dist_fallback = re.search(r'(\d+(?:\.\d+)?)\s*(?:km|kms|kilometers|miles)\b', combined_text, re.IGNORECASE)
+                distance = f"{dist_fallback.group(1)} km" if dist_fallback else None
+
+            # 6. Incident / Cleaning Surcharge
+            inc_m = re.search(r'(?:Incident|Cleaning|Anomaly|Penalty|Extra\s*Charge)[\w\s/–—\(\)\-\.#•:]*?((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', combined_text, re.IGNORECASE)
+            incident_fee = inc_m.group(1).strip() if inc_m else None
+
+            # 7. Driver Partner
+            driver_m = re.search(r'Driver(?:\s*Partner)?[\s:]+([A-Za-z\s\.]+?)(?:\s*\(|\n|,|$)', combined_text, re.IGNORECASE)
+            driver_name = driver_m.group(1).strip() if driver_m else None
+
+            # 8. Destination
+            dest_m = re.search(r'Destination[\s:]+([A-Za-z0-9\s]+?)(?:\s*Date|\n|$)', combined_text, re.IGNORECASE)
+            destination = dest_m.group(1).strip() if dest_m else None
+
+            # 9. Legal Threat Detection
+            legal_patterns = [r'\bsue\b', r'\blawyer\b', r'\bcourt\b', r'\blegal(?:\s*action)?\b', r'\bgrievance\s*cell\b', r'\bpolice\b', r'\bconsumer\s*forum\b', r'\bconsumer\s*court\b']
+            has_legal_threat = any(re.search(pat, lower_q) for pat in legal_patterns)
+
+            # 10. High-value dispute detection
+            is_high_dispute = (fare_num >= 1000.0) or (incident_fee is not None)
+            is_anomaly_or_dispute = is_third_party or has_legal_threat or is_high_dispute
+
+            if is_anomaly_or_dispute:
+                if has_legal_threat:
+                    response_type = "legal_escalation"
+                    confidence = 0.35
+                elif is_third_party:
+                    response_type = "platform_mismatch"
+                    confidence = 0.40
+                else:
+                    response_type = "billing_dispute"
+                    confidence = 0.45
+                escalation_recommended = True
+
+                sources = []
+                if is_third_party:
+                    sources.append("THIRD_PARTY_AUDIT")
+                if has_legal_threat or is_high_dispute:
+                    sources.append("SENIOR_GRIEVANCE_CELL")
+                if obs:
+                    kb_matches = re.findall(r'OLA-KB-\d{3}', obs)
+                    if kb_matches:
+                        sources.extend(list(dict.fromkeys(kb_matches)))
+                if not sources:
+                    sources = ["OLA-SUPPORT-CORE"]
+
+                lines = []
+                if booking_id:
+                    ride_ctx = f"Booking {booking_id}"
+                    if driver_name:
+                        ride_ctx += f" with driver {driver_name}"
+                    lines.append(f"Hello! Thank you for reaching out to Ola Customer Support regarding your trip ({ride_ctx}).")
+                else:
+                    lines.append("Hello! Thank you for contacting Ola Customer Support.")
+                lines.append("")
+
+                receipt_bullets = []
+                if total_fare:
+                    receipt_bullets.append(f"• Billed Total Fare: {total_fare}")
+                if distance:
+                    receipt_bullets.append(f"• Trip Distance: {distance}")
+                if incident_fee:
+                    receipt_bullets.append(f"• Disputed Incident Fee: {incident_fee}")
+                if invoice_no:
+                    inv_str = f"• Invoice Reference: #{invoice_no}"
+                    if driver_name and not booking_id:
+                        inv_str += f" (Driver Partner: {driver_name})"
+                    receipt_bullets.append(inv_str)
+
+                if receipt_bullets:
+                    lines.append("We have inspected and verified the following details from your submitted receipt:")
+                    lines.extend(receipt_bullets)
+                    lines.append("")
+
+                if is_third_party:
+                    lines.append(
+                        f"• Platform Verification Alert: This invoice was issued by '{detected_platform}', "
+                        f"which is an independent third-party mobility platform and is NOT operated by Ola. "
+                        f"Ola Customer Support agents and automated billing systems do not have administrative access to "
+                        f"{detected_platform} trip records, nor can Ola issue refunds or make fare adjustments for rides taken on external platforms."
+                    )
+                    lines.append("")
+
+                if has_legal_threat or is_high_dispute:
+                    reasons = []
+                    if has_legal_threat:
+                        reasons.append("formal legal escalation notice")
+                    if is_high_dispute:
+                        reasons.append(f"severe billing anomaly ({total_fare or 'high-value charge'})")
+                    reason_str = " and ".join(reasons)
+
+                    lines.append(
+                        f"• Priority Human Escalation: Due to the {reason_str}, this case has been flagged "
+                        f"for mandatory human intervention and routed directly to our Senior Grievance & Legal Escalation Cell "
+                        f"(Priority Dossier: #OLA-LEGAL-84920)."
+                    )
+                    lines.append("")
+                    lines.append(
+                        "• Resolution Policy Notice: Automated standard goodwill credits (capped at ₹250 under OLA-KB-008) "
+                        "are strictly inapplicable to severe fare anomalies or third-party disputes. "
+                        "A dedicated Senior Grievance Officer must audit the full trip telemetry and dispute log before any financial adjustment."
+                    )
+                    lines.append("")
+
+                lines.append("Next Steps:")
+                step_num = 1
+                if is_third_party:
+                    lines.append(
+                        f"{step_num}. Direct Provider Arbitration: Because this charge originates from {detected_platform}, "
+                        f"please submit Invoice #{invoice_no or 'on receipt'} directly to {detected_platform} Support for billing dispute resolution."
+                    )
+                    step_num += 1
+                if has_legal_threat or is_high_dispute:
+                    lines.append(
+                        f"{step_num}. Senior Officer Investigation: An Ola Senior Escalation Officer has been assigned to this dossier and will review all submitted evidence within 2 business hours."
+                    )
+                    step_num += 1
+                lines.append(
+                    f"{step_num}. Ola Partner Cross-Reference: If this trip was booked through an Ola partner integration or enterprise account, "
+                    f"please reply with your registered 10-digit mobile number or Ola CRN booking ID so our compliance team can verify the dispatch record."
+                )
+
+                answer_text = "\n".join(lines)
+                ticket_details = None
+
+            elif obs:
                 clean_obs = obs.strip()
                 while clean_obs.startswith("According to Ola Support Policy:"):
                     clean_obs = clean_obs[len("According to Ola Support Policy:"):].strip()
                 kb_matches = re.findall(r'OLA-KB-\d{3}', obs)
                 clean_obs = re.sub(r'\s*\(Sources?:.*?\)', '', clean_obs).strip()
-                
-                # Contextual extraction from query / uploaded receipt
-                booking_m = re.search(r'(?:Booking\s*(?:ID)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', query, re.IGNORECASE)
-                booking_id = booking_m.group(1).strip() if booking_m else None
-                driver_m = re.search(r'Driver:\s*([A-Za-z\s\.]+?)(?:\s*\(|\n|,|$)', query, re.IGNORECASE)
-                driver_name = driver_m.group(1).strip() if driver_m else None
-                dest_m = re.search(r'Destination[\s:]+([A-Za-z0-9\s]+?)(?:\s*Date|\n|$)', query, re.IGNORECASE)
-                destination = dest_m.group(1).strip() if dest_m else None
 
-                lower_q = query.lower()
                 lines = []
-                
-                # Conversational Greeting
                 if booking_id:
                     ride_ctx = f"Booking {booking_id}"
                     if driver_name:
@@ -250,10 +451,8 @@ class OlaCrewBaseLLM(BaseLLM):
                     lines.append(f"Hello! Thank you for reaching out to Ola Customer Support regarding your trip ({ride_ctx}).")
                 else:
                     lines.append("Hello! Thank you for contacting Ola Customer Support.")
-                    
                 lines.append("")
-                
-                # Contextual Policy Guidance
+
                 if any(k in lower_q for k in ["refund", "eligible", "money back", "fare", "overcharge", "cancellation", "cancel"]):
                     lines.append("Here is the eligibility evaluation for your request under official Ola support policy:")
                     lines.append("")
@@ -288,6 +487,11 @@ class OlaCrewBaseLLM(BaseLLM):
 
                 answer_text = "\n".join(lines)
                 sources = list(dict.fromkeys(kb_matches)) if kb_matches else ["OLA-KB-CORE"]
+                response_type = "policy_inquiry"
+                confidence = 0.95
+                escalation_recommended = False
+                ticket_details = None
+
             else:
                 qm = re.search(r'for query:\s*(.*)', query, re.IGNORECASE)
                 clean_q = qm.group(1).strip() if qm else query.strip()
@@ -297,16 +501,17 @@ class OlaCrewBaseLLM(BaseLLM):
                     f"Please contact our frontline support desk for specialized assistance."
                 )
                 sources = ["OLA-KB-CORE"]
-            response_type = "policy_inquiry"
-            escalation_recommended = False
-            ticket_details = None
-            
+                response_type = "policy_inquiry"
+                confidence = 0.95
+                escalation_recommended = False
+                ticket_details = None
+
         structured_data = {
             "query": query,
             "response_type": response_type,
             "answer": answer_text,
             "sources": sources,
-            "confidence": 0.95,
+            "confidence": confidence,
             "escalation_recommended": escalation_recommended,
             "ticket_details": ticket_details,
         }

@@ -206,31 +206,73 @@ class MultimodalAnalysisResult(BaseModel):
     filename: str = Field(description="Name of the uploaded file")
     file_type: str = Field(description="Detected type: 'pdf' or 'image'")
     extracted_text: str = Field(description="Raw text extracted via parser or OCR")
-    detected_entities: Dict[str, List[str]] = Field(default_factory=dict, description="Extracted ticket IDs, amounts, dates")
+    detected_entities: Dict[str, Any] = Field(default_factory=dict, description="Extracted ticket IDs, amounts, dates, and ride metrics")
     user_prompt: Optional[str] = Field(default=None, description="Optional user prompt provided with file")
     agent_response: AskResponse = Field(description="Full structured response from Ola Domain Support Agent")
 
 
-def extract_entities_from_text(text: str) -> Dict[str, List[str]]:
-    """Finds Ola ticket IDs, CRN booking numbers, and currency amounts."""
-    entities = {}
+def extract_entities_from_text(text: str) -> Dict[str, Any]:
+    """Finds Ola ticket IDs, CRN booking numbers, platform, amounts, and distance metrics."""
+    entities: Dict[str, Any] = {}
     
+    # Platform detection
+    known_platforms = ["CityTransit", "Uber", "Lyft", "Rapido", "BluSmart", "Ola"]
+    detected_platform = None
+    for p in known_platforms:
+        if re.search(r'\b' + re.escape(p) + r'\b', text, re.IGNORECASE):
+            detected_platform = p
+            break
+    entities["platform"] = detected_platform or "Ola"
+    entities["platform_mismatch"] = bool(detected_platform and detected_platform.lower() != "ola")
+
+    # Ticket IDs
     tickets = re.findall(r'OLA-TCK-\d{4}', text, re.IGNORECASE)
     if tickets:
         entities["ticket_ids"] = list(dict.fromkeys([t.upper() for t in tickets]))
         
-    crns = re.findall(r'CRN[-_]?\d{7,10}', text, re.IGNORECASE)
-    if crns:
-        entities["booking_crns"] = list(dict.fromkeys([c.upper() for c in crns]))
+    # Invoice numbers (require colon, hash, or number identifier to avoid consuming preceding text)
+    invoices = re.findall(r'Invoice\s*(?:#|No\.?|Number|ID|\:)\s*[:#]?\s*([A-Za-z0-9-_]+)', text, re.IGNORECASE)
+    cleaned_invoices = [
+        inv.strip() for inv in invoices 
+        if inv.upper() not in ["INVOICE", "NUMBER", "DETAILS", "RECEIPT"]
+    ]
+    if cleaned_invoices:
+        entities["invoice_number"] = cleaned_invoices[0]
 
-    bookings = re.findall(r'(?:Booking\s*(?:ID)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', text, re.IGNORECASE)
-    if bookings:
-        entities["booking_ids"] = list(dict.fromkeys([b.upper() for b in bookings]))
-        
-    amounts = re.findall(r'(?:[₹$Rs\.]\s*|\b)\d+(?:\.\d{2})\b', text)
-    if amounts:
-        entities["amounts"] = list(dict.fromkeys(amounts))
-        
+    # Booking IDs / Reference / CRNs
+    bookings = re.findall(r'(?:Booking\s*(?:ID|Reference|Ref|No|Number)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', text, re.IGNORECASE)
+    cleaned_bookings = [
+        b.strip() for b in bookings 
+        if b.upper() not in ["REFERENCE", "REF", "ID", "DETAILS", "NUMBER", "NO"]
+        and len(b.strip()) >= 4
+    ]
+    if cleaned_bookings:
+        entities["booking_ids"] = list(dict.fromkeys(cleaned_bookings))
+
+    # Total Fare Billed
+    fare_m = re.search(r'(?:TOTAL\s*AMOUNT\s*(?:BILLED)?|Total\s*Fare|TOTAL\s*CHARGED|Total)[\s:]*([₹$Rs\.]\s*[\d,]+(?:\.\d{2})?)', text, re.IGNORECASE)
+    if fare_m:
+        entities["total_fare"] = fare_m.group(1).strip()
+    else:
+        amounts = re.findall(r'[₹$Rs\.]\s*[\d,]+(?:\.\d{2})?', text)
+        if amounts:
+            entities["total_fare"] = amounts[0].strip()
+
+    # Distance
+    dist_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:km|kms|kilometers|miles)\b', text, re.IGNORECASE)
+    if dist_m:
+        entities["distance"] = f"{dist_m.group(1)} km"
+
+    # Incident / Cleaning / Penalty Fee
+    inc_m = re.search(r'(?:Incident|Cleaning|Anomaly|Penalty|Extra\s*Charge)[\w\s/–—\(\)\-\.#•]*?([₹$Rs\.]\s*[\d,]+(?:\.\d{2})?)', text, re.IGNORECASE)
+    if inc_m:
+        entities["incident_fee"] = inc_m.group(1).strip()
+
+    # Driver Partner
+    driver_m = re.search(r'Driver(?:\s*Partner)?[\s:]+([A-Za-z\s\.]+?)(?:\s*\(|\n|,|$)', text, re.IGNORECASE)
+    if driver_m:
+        entities["driver"] = driver_m.group(1).strip()
+
     return entities
 
 
@@ -260,23 +302,33 @@ def analyze_file_and_query_agent(
 
     detected_entities = extract_entities_from_text(extracted_text)
     
-    # Formulate query for the support agent
+    # Formulate clean structured query for support agent (No raw OCR text dumping)
     query_parts = []
     if user_prompt and user_prompt.strip():
         query_parts.append(user_prompt.strip())
         
-    if detected_entities.get("ticket_ids"):
-        tid = detected_entities["ticket_ids"][0]
-        query_parts.append(f"Regarding support ticket {tid}")
+    structured_doc_meta = []
+    if detected_entities.get("platform") and detected_entities["platform"] != "Ola":
+        structured_doc_meta.append(f"Platform: {detected_entities['platform']} (Third-Party)")
+    if detected_entities.get("invoice_number"):
+        structured_doc_meta.append(f"Invoice #: {detected_entities['invoice_number']}")
+    if detected_entities.get("booking_ids"):
+        structured_doc_meta.append(f"Booking Ref: {detected_entities['booking_ids'][0]}")
+    if detected_entities.get("total_fare"):
+        structured_doc_meta.append(f"Billed Total: {detected_entities['total_fare']}")
+    if detected_entities.get("distance"):
+        structured_doc_meta.append(f"Distance: {detected_entities['distance']}")
+    if detected_entities.get("incident_fee"):
+        structured_doc_meta.append(f"Incident Fee: {detected_entities['incident_fee']}")
+    if detected_entities.get("driver"):
+        structured_doc_meta.append(f"Driver: {detected_entities['driver']}")
         
-    if extracted_text.strip():
-        # Truncate text context to first 300 chars to avoid prompt bloat
-        snippet = extracted_text.strip()[:300].replace("\n", " ")
-        query_parts.append(f"(Extracted from {filename}: \"{snippet}\")")
+    if structured_doc_meta:
+        query_parts.append(f"[Verified Receipt Details: {', '.join(structured_doc_meta)}]")
     elif not user_prompt:
         query_parts.append(f"Please inspect and summarize the attached {file_type} document '{filename}' for Ola support policy guidance.")
 
-    synthesized_query = " ".join(query_parts) if query_parts else f"Review uploaded document {filename}"
+    synthesized_query = "\n\n".join(query_parts) if query_parts else f"Review uploaded document {filename}"
     
     # Run through the Ola Domain Support Agent
     ask_req = AskRequest(query=synthesized_query, session_id=session_id)
