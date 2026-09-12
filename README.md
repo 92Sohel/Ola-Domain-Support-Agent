@@ -21,6 +21,111 @@ In strict accordance with the capstone brief:
 
 ---
 
+## System Architectural Overview
+
+The Ola Domain Support Agent combines perimeter security guardrails, multi-agent orchestration via CrewAI, knowledge retrieval using local sentence-transformer vector embeddings, an independent two-agent verification review stage via Autogen, and enterprise governance controls.
+
+### End-to-End System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Ingress ["1. Ingress & Client Interface"]
+        UI["Swagger UI / Web Client"]
+        WS["WebSocket Client (/ws/chat)"]
+        CLI["Terminal CLI (interactive_chat.py)"]
+        DOC["Multimodal Upload (/multimodal/analyze)"]
+    end
+
+    subgraph Security ["2. Perimeter Security & Ingress Guardrails (guardrails.py, app.py)"]
+        PII["PII Redaction Engine (Masks Indian Phone Numbers to [REDACTED_PHONE])"]
+        INJ["Prompt Injection & Jailbreak Filter"]
+        BUDGET["Runtime Token Budget Enforcer (<500 tokens / 429 Throttle)"]
+        CACHE["Session-Aware In-Memory Response Cache (cache.py)"]
+    end
+
+    subgraph Orchestration ["3. Multi-Agent Orchestration Crew (crew_agent.py, mock_llm.py)"]
+        MEM["Session Memory Manager (InMemoryChatMessageHistory)"]
+        subgraph CrewAI ["Sequential Multi-Agent Crew"]
+            A1["Retrieval Specialist (rag_search_tool)"]
+            A2["Ticket Operations Specialist (check_support_ticket_status)"]
+            A3["Response Composer (Structured CrewResponse Synthesis)"]
+        end
+    end
+
+    subgraph DataLayer ["4. Tool Execution & Knowledge Stores (rag_core.py, tools.py)"]
+        CHROMA["ChromaDB Vector Store (Sentence-Based Chunks)"]
+        EMBED["Local all-MiniLM-L6-v2 Embeddings"]
+        TICKETS["Support Tickets DB (50 Seeded Records)"]
+        SCORING["Escalation Urgency Scoring Engine (0.40 Flag + 0.60 Age)"]
+        OCR["Local PDF & OCR Extractor (pypdf, pdfminer, Pillow)"]
+    end
+
+    subgraph Review ["5. Independent Verification Stage (review_stage.py)"]
+        REV["Policy Compliance Reviewer (Audits Draft Grounding)"]
+        ED["Final Editor Agent (Outputs Structured VerdictModel)"]
+    end
+
+    subgraph Governance ["6. Governance, Audit & Delivery (governance.py, logger.py)"]
+        RBAC["Least Autonomy Tool Gating (Role-Based Authorization)"]
+        AUDIT["ELK Structured Audit Logger (logs/audit.jsonl, Zero Disk PII)"]
+        OUT["Validated Response (AskResponse / CrewResponse)"]
+    end
+
+    UI --> PII
+    WS --> PII
+    CLI --> PII
+    DOC --> OCR
+    OCR --> PII
+
+    PII --> INJ
+    INJ --> BUDGET
+    BUDGET --> CACHE
+    CACHE -- Cache Hit --> AUDIT
+    CACHE -- Cache Miss --> MEM
+
+    MEM --> CrewAI
+    A1 <--> CHROMA
+    CHROMA <--> EMBED
+    A2 <--> RBAC
+    RBAC <--> TICKETS
+    A2 <--> SCORING
+    A1 --> A3
+    A2 --> A3
+
+    A3 --> REV
+    REV --> ED
+    ED --> AUDIT
+    AUDIT --> OUT
+```
+
+### Architectural Subsystems & Component Matrix
+
+| Subsystem Layer | Primary Modules | Key Responsibilities & Capabilities |
+| :--- | :--- | :--- |
+| **API & Ingress** | `app.py`, `interactive_chat.py` | FastAPI HTTP REST API (`/ask`, `/multimodal/analyze`, `/health`, `/add-document`), high-concurrency WebSocket server (`/ws/chat/{session_id}`), and interactive CLI chat. |
+| **Perimeter Security** | `guardrails.py`, `cache.py` | Input PII detection and regex-based phone masking, prompt injection heuristic matching, runtime token budget enforcement (HTTP 429), and session-isolated query caching. |
+| **Multi-Agent Core** | `crew_agent.py`, `mock_llm.py` | 3-agent sequential CrewAI crew (`Retrieval Specialist`, `Ticket Operations Specialist`, `Response Composer`). Multi-turn LangChain session memory manager. Deterministic `BaseLLM` implementation. |
+| **Knowledge & RAG** | `rag_core.py`, `kb_documents.py` | 12 authoritative Ola policy documents. Dual chunking strategies (Fixed-size vs Sentence-based) indexed into ChromaDB. Empirical cosine decision boundary ($0.40$) for fallback refusal. |
+| **Operational Tools** | `tools.py`, `dataset.py` | 50 reproducible synthetic Ola support records (seed 42). Two-factor escalation scoring engine combining explicit escalation flags (40%) and ticket aging (60%). |
+| **Multimodal Support** | `multimodal_support.py` | Local zero-network PDF text parsing (`pypdf`, `pdfminer`) and image OCR (`Pillow`). Deep regex extraction for platform mismatch, invoice numbers, trip distance, and incident fees. |
+| **Review & Audit** | `review_stage.py` | Autogen 2-agent round-robin group chat (`PolicyComplianceReviewerAgent` and `FinalEditorAgent`). Audits draft answers against grounding context and outputs structured Pydantic `VerdictModel`. |
+| **Governance & Logs** | `governance.py`, `logger.py` | Least autonomy role-based tool gating (`SecurityGovernanceError`), medium-risk system classification documentation, and ELK-compatible JSON-Lines logging with zero-disk PII guarantee. |
+
+### Request Lifecycle Flow
+
+1. **Ingress & Sanitization:** The client query arrives via HTTP POST `/ask`, WebSocket, or multimodal upload. `guardrails.py` masks fixed-format phone numbers to `[REDACTED_PHONE]` and checks for adversarial jailbreaks.
+2. **Budget & Cache Evaluation:** `app.py` checks query length against the token budget (<500 tokens). The session-keyed cache (`cache.py`) checks for recent identical queries; cache hits return within $<1\text{ ms}$.
+3. **Multi-Turn Memory Contextualization:** `SessionMemoryManager` resolves anaphoric references (e.g., *"What is its escalation status?"* $\to$ *"referencing OLA-TCK-1002"*).
+4. **Agent Dispatch & Tool Execution:**
+   - **Ticket Query:** Lookup Agent invokes `check_support_ticket_status`, validated through role-based access control (`governance.py`).
+   - **Policy Query:** Retrieval Agent queries ChromaDB via `rag_search_tool`. If similarity $<0.40$, it safely triggers the calibrated fallback refusal.
+   - **Dispute / Legal / Human Escalation:** The deterministic LLM classifies the intent (`legal_escalation`, `billing_dispute`, `platform_mismatch`, or `human_escalation`) and routes directly to human support cells with calibrated confidence.
+5. **Synthesis & Deduplication:** Response Composer synthesizes the final structured `CrewResponse` in a single pass, ensuring zero paragraph repetition.
+6. **Autogen Policy Audit:** The draft response and retrieved context are submitted to the 2-agent Autogen review team (`review_stage.py`). If ungrounded claims are detected, the draft is revised before release.
+7. **Logging & Client Delivery:** The final response is cached, recorded to `logs/audit.jsonl` with full trace ID telemetry (zero PII written to disk), and returned to the client.
+
+---
+
 ## 2. Part 1 — Dataset Design & Reproducibility Parameters (Task 1)
 
 The support ticket dataset (`dataset.py`) is deterministically generated using Python's seeded pseudo-random generator. To allow exact replication by the grader, the explicit design choices are documented below:
