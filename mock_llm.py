@@ -331,7 +331,44 @@ class OlaCrewBaseLLM(BaseLLM):
             is_high_dispute = (fare_num >= 1000.0) or (incident_fee is not None)
             is_anomaly_or_dispute = is_third_party or has_legal_threat or is_high_dispute
 
-            if is_anomaly_or_dispute:
+            # 11. Explicit Human Advisor / Live Agent Request Detection
+            human_patterns = [
+                r'\b(?:talk|speak|connect|transfer|chat)\s+(?:to|with)?\s*(?:a\s+)?(?:human|person|agent|advisor|representative|executive|specialist|operator)\b',
+                r'\b(?:human|live)\s+(?:agent|advisor|representative|support|help|person|specialist|assistance)\b',
+                r'\b(?:customer\s+care|support\s+executive)\b',
+                r'\btransfer\s+to\s+human\b',
+                r'\breal\s+person\b',
+            ]
+            is_human_request = any(re.search(pat, lower_q) for pat in human_patterns)
+
+            if is_human_request:
+                response_type = "human_escalation"
+                confidence = 0.95
+                escalation_recommended = True
+                sources = ["OLA-SUPPORT-ROUTING", "OLA-KB-005"]
+
+                lines = []
+                if booking_id:
+                    ride_ctx = f"Booking {booking_id}"
+                    if driver_name:
+                        ride_ctx += f" with driver {driver_name}"
+                    lines.append(f"Hello! Thank you for reaching out to Ola Customer Support regarding {ride_ctx}.")
+                else:
+                    lines.append("Hello! Thank you for contacting Ola Customer Support.")
+                lines.append("")
+                lines.append("I have received your request to connect with a human advisor. Your conversation is being transferred to a live customer care specialist.")
+                lines.append("")
+                lines.append("• Queue Status: Routing to an active Level 1 Support Specialist.")
+                lines.append("• Estimated Wait Time: 2 to 4 minutes.")
+                lines.append("• Priority Handoff Ref: #OLA-LIVE-CHAT-882")
+                lines.append("• Official Support Channels: You can also initiate an instant chat or request an automated callback through the Ola App under 'Help & Support' > 'Active Ride Assistance'.")
+                lines.append("")
+                lines.append("Please remain connected while our support representative reviews your inquiry and joins the session.")
+
+                answer_text = "\n".join(lines)
+                ticket_details = None
+
+            elif is_anomaly_or_dispute:
                 if has_legal_threat:
                     response_type = "legal_escalation"
                     confidence = 0.35

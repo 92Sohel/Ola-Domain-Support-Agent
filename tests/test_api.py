@@ -162,5 +162,19 @@ def test_websocket_chat_and_graceful_disconnect():
     assert health.json()["status"] == "HEALTHY"
 
 
+def test_ask_human_escalation():
+    req = {
+        "query": "I want to talk to a human advisor.",
+        "session_id": "test-session-human"
+    }
+    response = client.post("/ask", json=req)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response_type"] == "human_escalation"
+    assert data["escalation_recommended"] is True
+    assert "human advisor" in data["answer"].lower() or "customer care" in data["answer"].lower()
+    assert "OLA-LIVE-CHAT" in data["answer"]
+
+
 if __name__ == "__main__":
     pytest.main(["-v", "tests/test_api.py"])
