@@ -33,3 +33,4 @@ htmlcov/
 .env.*
 chroma_db/
 logs/*.jsonl
+.vscode/

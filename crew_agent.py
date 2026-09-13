@@ -65,8 +65,11 @@ def get_rag_core():
 @tool("rag_search")
 def rag_search_tool(query: str) -> str:
     """Searches the Ola Knowledge Base for policy information, SLAs, refunds, and support guidelines."""
+    clean_query = query.strip()
+    if "This is the expected criteria" in clean_query:
+        clean_query = clean_query.split("This is the expected criteria")[0].strip()
     rag = get_rag_core()
-    res = grounded_generation(query, rag)
+    res = grounded_generation(clean_query, rag)
     sources = res.get("sources", [])
     if sources:
         return f"{res['answer']} (Sources: {', '.join(sources)})"

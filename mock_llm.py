@@ -128,14 +128,17 @@ def extract_query_text(messages: Union[str, List[Any]]) -> str:
             full_text += " " + str(content)
             
     # Try to extract from 'Current Task:' or 'task:'
-    # Avoid terminating on internal newlines in the query; terminate on ReAct / CrewAI headers
-    m = re.search(r'(?:Current Task|task):\s*(.*?)(?=\nThis is the context|\nInstructions:|\nAction:|\nThought:|\Z)', full_text, re.IGNORECASE | re.DOTALL)
+    # Avoid terminating on internal newlines in the query; terminate on ReAct / CrewAI headers or criteria blocks
+    m = re.search(r'(?:Current Task|task):\s*(.*?)(?=\n\s*This is the expected criteria|\nThis is the context|\nInstructions:|\nAction:|\nThought:|\Z)', full_text, re.IGNORECASE | re.DOTALL)
     if m:
         task_text = m.group(1).strip()
-        # If task text wraps 'for query: <actual_query>', extract the user's actual question
-        qm = re.search(r'(?:for query|regarding):\s*(.*)', task_text, re.IGNORECASE | re.DOTALL)
+        # If task text wraps 'for query: <actual_query>', extract the user's actual question cleanly
+        qm = re.search(r'(?:for query|regarding):\s*(.*?)(?=\n\s*This is the expected criteria|\Z)', task_text, re.IGNORECASE | re.DOTALL)
         if qm:
-            return qm.group(1).strip()
+            clean_q = qm.group(1).strip()
+            clean_q = re.split(r'\n\s*This is the expected criteria', clean_q, flags=re.IGNORECASE)[0].strip()
+            return clean_q
+        task_text = re.split(r'\n\s*This is the expected criteria', task_text, flags=re.IGNORECASE)[0].strip()
         return task_text
         
     # Or first user message
@@ -248,26 +251,26 @@ class OlaCrewBaseLLM(BaseLLM):
             escalation_recommended = bool(obs and "RECOMMENDED" in obs)
             ticket_details = {"record_id": rec_id, "summary": clean_obs or obs}
         else:
-            combined_text = f"{query} {obs or ''}"
-            lower_q = combined_text.lower()
+            user_text = query
+            lower_q = user_text.lower()
 
-            # 1. Platform Detection
+            # 1. Platform Detection (from user inquiry/receipt context only, not internal KB docs)
             known_platforms = ["CityTransit", "Uber", "Lyft", "Rapido", "BluSmart"]
             detected_platform = None
-            plat_m = re.search(r'Platform[\s:]+([A-Za-z0-9]+)', combined_text, re.IGNORECASE)
+            plat_m = re.search(r'Platform[\s:]+([A-Za-z0-9]+)', user_text, re.IGNORECASE)
             if plat_m:
                 p_cand = plat_m.group(1).strip()
-                if p_cand.lower() != "ola":
+                if p_cand.lower() not in ["ola", "outage", "status", "system", "app"]:
                     detected_platform = p_cand
             if not detected_platform:
                 for p in known_platforms:
-                    if re.search(r'\b' + re.escape(p) + r'\b', combined_text, re.IGNORECASE):
+                    if re.search(r'\b' + re.escape(p) + r'\b', user_text, re.IGNORECASE):
                         detected_platform = p
                         break
             is_third_party = bool(detected_platform and detected_platform.lower() != "ola")
 
             # 2. Invoice Reference
-            inv_m = re.search(r'Invoice\s*(?:#|No\.?|Number|ID|\:)\s*[:#]?\s*([A-Za-z0-9-_]+)', combined_text, re.IGNORECASE)
+            inv_m = re.search(r'Invoice\s*(?:#|No\.?|Number|ID|\:)\s*[:#]?\s*([A-Za-z0-9-_]+)', user_text, re.IGNORECASE)
             invoice_no = None
             if inv_m:
                 inv_cand = inv_m.group(1).strip()
@@ -275,15 +278,15 @@ class OlaCrewBaseLLM(BaseLLM):
                     invoice_no = inv_cand
 
             # 3. Booking / CRN Reference
-            booking_m = re.search(r'(?:Booking\s*(?:ID|Reference|Ref|No|Number)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', combined_text, re.IGNORECASE)
+            booking_m = re.search(r'(?:Booking\s*(?:ID|Reference|Ref|No|Number)?|CRN)[\s:#]+([#A-Za-z0-9-_]+)', user_text, re.IGNORECASE)
             booking_id = None
             if booking_m:
                 b_cand = booking_m.group(1).strip()
-                if b_cand.upper() not in ["REFERENCE", "REF", "ID", "DETAILS", "NUMBER", "NO"] and len(b_cand) >= 4:
+                if b_cand.upper() not in ["REFERENCE", "REF", "ID", "DETAILS", "NUMBER", "NO", "ENGINE"] and len(b_cand) >= 4:
                     booking_id = b_cand
 
             # 4. Total Fare Billed
-            fare_m = re.search(r'(?:Billed\s*Total|TOTAL\s*AMOUNT\s*(?:BILLED)?|Total\s*Fare|TOTAL\s*CHARGED|Total)[\s:]*((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', combined_text, re.IGNORECASE)
+            fare_m = re.search(r'(?:Billed\s*Total|TOTAL\s*AMOUNT\s*(?:BILLED)?|Total\s*Fare|TOTAL\s*CHARGED|Total)[\s:]*((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', user_text, re.IGNORECASE)
             total_fare = None
             fare_num = 0.0
             if fare_m:
@@ -294,7 +297,7 @@ class OlaCrewBaseLLM(BaseLLM):
                 except ValueError:
                     fare_num = 0.0
             else:
-                amts = re.findall(r'(?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?', combined_text)
+                amts = re.findall(r'(?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?', user_text)
                 if amts:
                     total_fare = amts[0].strip()
                     raw_num = re.sub(r'[^\d\.]', '', total_fare)
@@ -304,23 +307,23 @@ class OlaCrewBaseLLM(BaseLLM):
                         fare_num = 0.0
 
             # 5. Trip Distance (prioritize explicit 'Distance: <metric>' over arbitrary user mentions)
-            dist_m = re.search(r'Distance[\s:]*(\d+(?:\.\d+)?\s*(?:km|kms|kilometers|miles)\b)', combined_text, re.IGNORECASE)
+            dist_m = re.search(r'Distance[\s:]*(\d+(?:\.\d+)?\s*(?:km|kms|kilometers|miles)\b)', user_text, re.IGNORECASE)
             if dist_m:
                 distance = dist_m.group(1).strip()
             else:
-                dist_fallback = re.search(r'(\d+(?:\.\d+)?)\s*(?:km|kms|kilometers|miles)\b', combined_text, re.IGNORECASE)
+                dist_fallback = re.search(r'(\d+(?:\.\d+)?)\s*(?:km|kms|kilometers|miles)\b', user_text, re.IGNORECASE)
                 distance = f"{dist_fallback.group(1)} km" if dist_fallback else None
 
             # 6. Incident / Cleaning Surcharge
-            inc_m = re.search(r'(?:Incident|Cleaning|Anomaly|Penalty|Extra\s*Charge)[\w\s/–—\(\)\-\.#•:]*?((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', combined_text, re.IGNORECASE)
+            inc_m = re.search(r'(?:Incident|Cleaning|Anomaly|Penalty|Extra\s*Charge)[\w\s/–—\(\)\-\.#•:]*?((?:₹|\$|Rs\.?|INR)\s*[\d,]+(?:\.\d{2})?)', user_text, re.IGNORECASE)
             incident_fee = inc_m.group(1).strip() if inc_m else None
 
             # 7. Driver Partner
-            driver_m = re.search(r'Driver(?:\s*Partner)?[\s:]+([A-Za-z\s\.]+?)(?:\s*\(|\n|,|$)', combined_text, re.IGNORECASE)
+            driver_m = re.search(r'Driver(?:\s*Partner)?[\s:]+([A-Za-z\s\.]+?)(?:\s*\(|\n|,|$)', user_text, re.IGNORECASE)
             driver_name = driver_m.group(1).strip() if driver_m else None
 
             # 8. Destination
-            dest_m = re.search(r'Destination[\s:]+([A-Za-z0-9\s]+?)(?:\s*Date|\n|$)', combined_text, re.IGNORECASE)
+            dest_m = re.search(r'Destination[\s:]+([A-Za-z0-9\s]+?)(?:\s*Date|\n|$)', user_text, re.IGNORECASE)
             destination = dest_m.group(1).strip() if dest_m else None
 
             # 9. Legal Threat Detection
